@@ -1,4 +1,4 @@
-# 🏄‍♂️ Nuxt Cross-Site Request Forgery (CSRF) Prevention using Web Crypo API (requires Node.js 19+)
+# 🏄‍♂️ Nuxt Cross-Site Request Forgery (CSRF) Prevention using Web Crypto API (requires Node.js 19+)
 
 Create a middleware for CSRF token creation and validation. 
 This fork is compatible with Cloudflare Workers.
