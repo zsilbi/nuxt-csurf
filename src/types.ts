@@ -18,6 +18,6 @@ export interface ModuleOptions {
   cookieKey?: string,
   methodsToProtect?: Array<string>, // the request methods we want CSRF protection for
   excludedUrls?: Array<string|[string, string]>, // any URLs we want to exclude from CSRF protection
-  encryptSecret?: string,
-  encryptAlgorithm?: string
+  encryptKey?: JsonWebKey;
+  encryptAlgorithm?: "AES-CBC" | "AES-CTR" | "AES-GCM";
 }

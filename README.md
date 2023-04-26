@@ -1,6 +1,7 @@
-# 🏄‍♂️ Nuxt Cross-Site Request Forgery (CSRF) Prevention
+# 🏄‍♂️ Nuxt Cross-Site Request Forgery (CSRF) Prevention using Web Crypo API (requires Node.js 19+)
 
 Create a middleware for CSRF token creation and validation. 
+This fork is compatible with Cloudflare Workers.
 
 ## Setup
 
@@ -29,8 +30,8 @@ The only thing you need to do to use the module in the default configuration is 
     },
     methodsToProtect: ['POST', 'PUT', 'PATCH'], // the request methods we want CSRF protection for
     excludedUrls: ['/nocsrf1', ['/nocsrf2/.*', 'i']], // any URLs we want to exclude from CSRF protection
-    encryptSecret: /** a 32 bits secret */, // random bytes by default
-    encryptAlgorithm: 'aes-256-cbc'
+    encryptSecret: /** JsonWebKey object */, // random key by default
+    encryptAlgorithm: 'AES-CBC'
   } 
 }
 ```

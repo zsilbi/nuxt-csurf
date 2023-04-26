@@ -1,40 +1,73 @@
 
-import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'crypto'
+import { randomUUID, getRandomValues } from 'crypto'
 import { defineEventHandler, getCookie, setCookie, getHeader, createError } from 'h3'
 import { useRuntimeConfig } from '#imports'
 
+const { subtle } = globalThis.crypto;
 const csrfConfig = useRuntimeConfig().csurf
-const secrefBuffer = Buffer.from(csrfConfig.encryptSecret)
+
+const importKey = async (key: JsonWebKey) => {
+  return subtle.importKey(
+    "jwk",
+    key,
+    {
+      name: csrfConfig.encryptAlgorithm,
+      length: 256,
+    },
+    true,
+    ["encrypt", "decrypt"]
+  );
+};
 
 /**
  * Create a new CSRF token (encrypt secret using csrfConfig.encryptAlgorithm)
  */
-const createCsrf = (secret: string): string => {
-  const iv = randomBytes(16)
-  const cipher = createCipheriv(csrfConfig.encryptAlgorithm, secrefBuffer, iv)
-  const encrypted = cipher.update(secret, 'utf8', 'base64') +
-    cipher.final('base64')
-  return `${iv.toString('base64')}:${encrypted}`
-}
+const createCsrf = async (secret: string) => {
+  const iv = getRandomValues(new Uint8Array(16));
+
+  const encrypted = await subtle.encrypt(
+    {
+      name: csrfConfig.encryptAlgorithm,
+      iv,
+    },
+    await importKey(csrfConfig.encryptKey),
+    new TextEncoder().encode(secret)
+  );
+
+  const ivBase64 = Buffer.from(iv).toString("base64");
+  const encryptedBase64 = Buffer.from(new Uint8Array(encrypted)).toString(
+    "base64"
+  );
+
+  return ivBase64 + ":" + encryptedBase64;
+};
 
 /**
  * Check csrf token (decrypt secret using csrfConfig.encryptAlgorithm)
  */
-const verifyCsrf = (secret: string, token: string): boolean => {
+const verifyCsrf = async (secret: string, token: string) => {
   const [iv, encrypted] = token.split(':')
   if (!iv || !encrypted) { return false }
   let decrypted
   try {
-    const decipher = createDecipheriv(csrfConfig.encryptAlgorithm, secrefBuffer, Buffer.from(iv, 'base64'))
-    decrypted = decipher.update(encrypted, 'base64', 'utf-8') +
-      decipher.final('utf-8')
-  } catch (error) {
-    return false
+      const encodedDecrypted = await subtle.decrypt(
+        {
+          name: csrfConfig.encryptAlgorithm,
+          iv: Buffer.from(iv, "base64"),
+        },
+        await importKey(csrfConfig.encryptKey),
+        Buffer.from(encrypted, "base64")
+      );
+  
+      decrypted = new TextDecoder().decode(encodedDecrypted);
+    } catch (error) {
+      return false;
+    }
+  
+    return decrypted === secret;
   }
-  return decrypted === secret
-}
 
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   let secret = getCookie(event, csrfConfig.cookieKey)
   if (!secret) {
     secret = randomUUID()
@@ -42,7 +75,7 @@ export default defineEventHandler((event) => {
   }
 
   Object.defineProperty(event.node.res, '_csrftoken', {
-    value: createCsrf(secret),
+    value: await createCsrf(secret),
     enumerable: true
   })
 
@@ -52,10 +85,10 @@ export default defineEventHandler((event) => {
   // verify the incoming csrf token
   const url = event.node.req.url ?? ''
   const excluded = csrfConfig.excludedUrls?.filter((el: string|[string, string]) =>
-    Array.isArray(el) ? new RegExp(...el).test(url) : el === url
+      Array.isArray(el) ? new RegExp(...el).test(url) : el === url
   ).length > 0
   const token = getHeader(event, 'csrf-token') ?? ''
-  if (!excluded && !verifyCsrf(secret, token)) {
+  if (!excluded && !await verifyCsrf(secret, token)) {
     throw createError({
       statusCode: 403,
       name: 'EBADCSRFTOKEN',

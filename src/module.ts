@@ -1,4 +1,3 @@
-import { randomBytes } from 'crypto'
 import { defu } from 'defu'
 import { defineNuxtModule, createResolver, addServerHandler, addImports, addPlugin } from '@nuxt/kit'
 import { RuntimeConfig } from '@nuxt/schema'
@@ -22,18 +21,41 @@ export default defineNuxtModule<ModuleOptions>({
     },
     methodsToProtect: ['POST', 'PUT', 'PATCH'],
     excludedUrls: [],
-    encryptSecret: randomBytes(22).toString('base64'),
-    encryptAlgorithm: 'aes-256-cbc'
+    encryptKey: undefined,
+    encryptAlgorithm: "AES-CBC",
   },
-  setup (options, nuxt) {
-    const { resolve } = createResolver(import.meta.url)
+  async setup(options, nuxt) {
+    const { resolve } = createResolver(import.meta.url);
 
     if (!options.cookieKey) {
-      options.cookieKey = `${options.https ? '__Host-' : ''}csrf`
+      options.cookieKey = `${options.https ? "__Host-" : ""}csrf`;
     }
     options.cookie = options.cookie || {}
     if (options.cookie.secure === undefined) {
-      options.cookie.secure = !!options.https
+      options.cookie.secure = !!options.https;
+    }
+
+    let algorithm = options.encryptAlgorithm;
+
+    if (algorithm === undefined) {
+      algorithm = "AES-CBC";
+
+      options.encryptAlgorithm = algorithm;
+    }
+
+    if (options.encryptKey === undefined) {
+      const { subtle } = globalThis.crypto;
+
+      const encryptKey = await subtle.generateKey(
+        {
+          name: algorithm,
+          length: 256,
+        },
+        true,
+        ["encrypt", "decrypt"]
+      );
+
+      options.encryptKey = await subtle.exportKey("jwk", encryptKey);
     }
 
     nuxt.options.runtimeConfig.csurf = defu(nuxt.options.runtimeConfig.csurf, options as RuntimeConfig['csurf'])
@@ -43,8 +65,8 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.build.transpile.push(resolve('runtime'))
 
     addImports(['useCsrf', 'useCsrfFetch'].map(key => ({
-      name: key,
-      as: key,
+        name: key,
+        as: key,
       from: resolve('runtime/composables')
     })))
 
